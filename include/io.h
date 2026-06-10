@@ -20,6 +20,18 @@
  */
 
 /**
+ * @brief Check whether the io_uring backend is usable in this environment.
+ *
+ * Initializes the shared ring on success, so later I/O reuses it. This lets a
+ * program fail fast with a clear message where io_uring is unavailable - a
+ * kernel with `kernel.io_uring_disabled` set, or a restrictive sandbox - rather
+ * than appear to start and then never make progress.
+ *
+ * @return 0 if io_uring is available, or a negative errno if it is not.
+ */
+int coro_io_probe(void);
+
+/**
  * @brief Read from a file descriptor (read(2)/recv semantics).
  * @param fd   File descriptor to read from.
  * @param buf  Destination buffer.

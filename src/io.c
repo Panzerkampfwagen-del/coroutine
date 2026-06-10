@@ -77,6 +77,10 @@ static int io_submit_and_wait(struct io_uring_sqe *sqe) {
     return self->io_result;
 }
 
+int coro_io_probe(void) {
+    return io_init(); /* 0 if the ring initializes, -errno otherwise */
+}
+
 int coro_read(int fd, void *buf, size_t len) {
     int rc = io_init();
     if (rc < 0)

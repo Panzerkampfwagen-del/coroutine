@@ -885,6 +885,15 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    /* The proxy dials backends with io_uring; fail fast if it is unavailable.
+     */
+    if (coro_io_probe() < 0) {
+        fprintf(stderr,
+                "fatal: io_uring is unavailable (check "
+                "kernel.io_uring_disabled); microdb-proxy requires it\n");
+        return 1;
+    }
+
     signal(SIGPIPE, SIG_IGN);
     struct sigaction sa;
     memset(&sa, 0, sizeof sa);

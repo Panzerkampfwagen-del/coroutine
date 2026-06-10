@@ -1166,6 +1166,14 @@ int main(int argc, char **argv) {
         g_is_replica = 1;
     }
 
+    /* Fail fast (and clearly) where io_uring is unavailable, instead of
+       binding the port and then never serving a request. */
+    if (coro_io_probe() < 0) {
+        fprintf(stderr, "fatal: io_uring is unavailable (check "
+                        "kernel.io_uring_disabled); microdb requires it\n");
+        return 1;
+    }
+
     signal(SIGPIPE, SIG_IGN);
     struct sigaction sa;
     memset(&sa, 0, sizeof sa);
