@@ -1,0 +1,22 @@
+# Build artifacts
+*.o
+*.a
+.build-mode
+
+# Built binaries (examples, demo, tests)
+/hello
+/pingpong
+/echo
+/echo_server
+/microdb
+/microdb_proxy
+/stress
+/channel_fuzz
+/sched_fuzz
+
+# Python
+__pycache__/
+*.pyc
+
+# Local notes / scratch (not part of the project)
+/prompt.md

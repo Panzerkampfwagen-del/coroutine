@@ -1,0 +1,27 @@
+# Focused on bug detection rather than style. The insecureAPI checks (which
+# demand C11 Annex K _s functions glibc does not ship) and a few noisy heuristics
+# are disabled. The critical families are promoted to errors so CI fails on them.
+---
+Checks: >
+  bugprone-*,
+  clang-analyzer-*,
+  performance-*,
+  portability-*,
+  misc-*,
+  -clang-analyzer-security.insecureAPI.*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-reserved-identifier,
+  -bugprone-multi-level-implicit-pointer-conversion,
+  -bugprone-branch-clone,
+  -cert-dcl37-c,
+  -cert-dcl51-cpp,
+  -performance-no-int-to-ptr,
+  -misc-no-recursion,
+  -misc-include-cleaner,
+  -misc-unused-parameters
+
+WarningsAsErrors: 'bugprone-*,clang-analyzer-*'
+
+HeaderFilterRegex: '(include|src)/.*\.h$'
+
+FormatStyle: file

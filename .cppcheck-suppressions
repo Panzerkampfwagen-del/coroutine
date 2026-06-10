@@ -1,0 +1,10 @@
+# cppcheck suppressions for the coro project.
+# Format: <id>:<file> or just <id> for a global suppression.
+
+# We deliberately do not check headers we don't own (liburing, libc, sanitizer).
+missingIncludeSystem
+
+# checkersReport / informational notes are not defects.
+checkersReport
+
+# The benchmark and run scripts are not C translation units.
