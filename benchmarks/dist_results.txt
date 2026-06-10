@@ -1,0 +1,6 @@
+### Non-pipelined (-c 50, n=200000) ###
+direct single node        SET = 150829.56 GET = 143884.89 INCR = 154202.00
+via proxy (2 shards)      SET = 102933.61 GET = 93196.65 INCR = 101112.23
+### Pipelined (-P 16) ###
+direct single node        SET = 2173913.00 GET = 2352941.25 INCR = 2272727.25
+via proxy (2 shards)      SET = 1086956.50 GET = 1123595.50 INCR = 1197604.88
