@@ -66,7 +66,12 @@ static struct io_uring_sqe *io_get_sqe(void) {
    submission error if io_uring_submit fails. */
 static int io_submit_and_wait(struct io_uring_sqe *sqe) {
     coro_t *self = coro_current();
-    io_uring_sqe_set_data64(sqe, (uint64_t)(unsigned)self->id);
+    /* Stash the coroutine id in user_data. We use the void* setter rather than
+       io_uring_sqe_set_data64 because the latter only exists in liburing
+       >= 2.2; older distributions (e.g. Ubuntu 22.04's liburing 2.1) ship just
+       the pointer variant. The id is small, so it round-trips through void*
+       fine. */
+    io_uring_sqe_set_data(sqe, (void *)(uintptr_t)(unsigned)self->id);
 
     int rc = io_uring_submit(&g_ring);
     if (rc < 0)
@@ -147,7 +152,7 @@ int coro_sleep(uint64_t ms) {
 
 /* Wake the coroutine that owns a completion and recycle the CQE. */
 static int reap_one(struct io_uring_cqe *cqe) {
-    int id = (int)(unsigned)io_uring_cqe_get_data64(cqe);
+    int id = (int)(unsigned)(uintptr_t)io_uring_cqe_get_data(cqe);
     coro_t *c = pending_take(id);
     if (c) {
         c->io_result = cqe->res;
