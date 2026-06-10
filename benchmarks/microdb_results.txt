@@ -1,0 +1,28 @@
+microdb vs redis 7.0.15  |  redis-benchmark -t ping,set,get,incr  |  12 vCPU, 6.6.114.1-microsoft-standard-WSL2
+
+### Non-pipelined (-c 50) ###
+== microdb ==
+PING_INLINE: 144787.64 requests per second, p50=0.175 msec
+PING_MBULK: 127986.34 requests per second, p50=0.199 msec
+SET: 125313.28 requests per second, p50=0.207 msec
+GET: 107952.50 requests per second, p50=0.215 msec
+INCR: 121212.12 requests per second, p50=0.207 msec
+== redis ==
+PING_INLINE: 158730.16 requests per second, p50=0.159 msec
+PING_MBULK: 159574.47 requests per second, p50=0.159 msec
+SET: 169300.23 requests per second, p50=0.143 msec
+GET: 165107.31 requests per second, p50=0.151 msec
+INCR: 167785.23 requests per second, p50=0.143 msec
+### Pipelined (-P 16) ###
+== microdb ==
+PING_INLINE: 1948052.00 requests per second, p50=0.223 msec
+PING_MBULK: 1999999.88 requests per second, p50=0.207 msec
+SET: 1948052.00 requests per second, p50=0.199 msec
+GET: 2027027.00 requests per second, p50=0.215 msec
+INCR: 2097902.00 requests per second, p50=0.287 msec
+== redis ==
+PING_INLINE: 1910828.00 requests per second, p50=0.303 msec
+PING_MBULK: 2586207.00 requests per second, p50=0.207 msec
+SET: 1999999.88 requests per second, p50=0.335 msec
+GET: 2307692.50 requests per second, p50=0.279 msec
+INCR: 2272727.25 requests per second, p50=0.279 msec
