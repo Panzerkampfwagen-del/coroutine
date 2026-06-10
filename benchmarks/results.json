@@ -1,0 +1,36 @@
+{
+  "config": {
+    "host": "127.0.0.1",
+    "port": 8080,
+    "connections": 1000,
+    "duration_s": 5.0,
+    "message_bytes": 64,
+    "probe_requests": 20000
+  },
+  "connections_per_sec": 9263.5,
+  "connect_time_s": 0.108,
+  "requests": 266609,
+  "requests_per_sec": 53231.6,
+  "throughput_mbps": 3.41,
+  "latency_us": {
+    "min": 40.79,
+    "p50": 80.83,
+    "p90": 169.46,
+    "p99": 270.82,
+    "p999": 517.69,
+    "max": 1508.95
+  },
+  "latency_under_load_us": {
+    "min": 6755.43,
+    "p50": 17028.38,
+    "p90": 27312.08,
+    "p99": 30966.8,
+    "p999": 33612.02,
+    "max": 33862.06
+  },
+  "mismatches": 0,
+  "meta": {
+    "kernel": "6.6.114.1-microsoft-standard-WSL2",
+    "python": "3.13.9"
+  }
+}
