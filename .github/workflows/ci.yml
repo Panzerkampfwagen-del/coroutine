@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y liburing-dev clang-format clang-tidy cppcheck
+
+      - name: Build (library, examples, echo_server, microdb, proxy)
+        run: make
+
+      - name: Run tests
+        run: make check
+
+      - name: Sanitizer build (ASan + UBSan) and tests
+        run: |
+          make debug
+          export ASAN_OPTIONS=detect_leaks=1:abort_on_error=1
+          export UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
+          ./hello >/dev/null
+          ./pingpong
+          ./stress 5
+          ./channel_fuzz 20000
+          ./sched_fuzz 20000
+
+  static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y liburing-dev clang-format clang-tidy cppcheck
+
+      - name: clang-format
+        run: make format-check
+
+      - name: clang-tidy
+        run: make tidy
+
+      - name: cppcheck
+        run: make cppcheck
+
+  cross-aarch64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cross toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu qemu-user-static
+
+      - name: Build + run the runtime on aarch64 under qemu
+        run: make aarch64-check
+
+  distributed:
+    # This is the only job that runs io_uring at *runtime* (microdb / the proxy).
+    # Pinned to 22.04, where io_uring is enabled and not gated by the
+    # kernel.io_uring_disabled sysctl that hardened 24.04 images may set to 2.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y liburing-dev
+
+      - name: Show kernel io_uring status (diagnostic)
+        run: sysctl kernel.io_uring_disabled 2>/dev/null || echo "io_uring not gated by sysctl (enabled)"
+
+      - name: End-to-end replication + sharding + failover
+        run: make dist-check
