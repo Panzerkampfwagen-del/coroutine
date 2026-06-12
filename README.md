@@ -4,19 +4,18 @@
 assembly context switching (x86-64 and aarch64) and `io_uring` async I/O - and a
 Redis-compatible store on top that keeps pace with Redis at ~1% of the code.**
 
-[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
+[![CI](https://github.com/Panzerkampfwagen-del/coroutine/actions/workflows/ci.yml/badge.svg)](https://github.com/Panzerkampfwagen-del/coroutine/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-linux%20%7C%20x86--64%20%7C%20aarch64-lightgrey)
 
-> Badge URLs use `OWNER/REPO` placeholders; update them once the repository is
-> hosted. A full design write-up is in [docs/design.md](docs/design.md).
+> A full design write-up is in [docs/design.md](docs/design.md).
 
 ---
 
 ## Quick start
 
 ```sh
-git clone <your-fork-url> coro && cd coro
+git clone https://github.com/Panzerkampfwagen-del/coroutine.git coro && cd coro
 sudo apt-get install -y liburing-dev   # Linux 5.1+
 make                                   # libcoro.a, examples, echo_server, microdb
 make check                             # build and run the test suite
