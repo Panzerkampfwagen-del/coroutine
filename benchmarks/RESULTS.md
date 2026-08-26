@@ -33,3 +33,29 @@ io_uring backend wins connection ramp-up (~1.5×) and its advantage grows
 where syscalls would block for real (slower peers, larger reads, accept
 storms); it also removes the busy retry-yield pattern entirely. Choose per
 workload; both backends share every other layer of the runtime.
+
+
+## microdb vs Redis (same box, same client: redis-benchmark)
+
+Redis 7.4-stable built from source (MALLOC=libc), --save ''; microdb as
+committed. 50 connections, 50k ops per test, loopback. redis-benchmark
+drives BOTH servers, so the client is identical.
+
+| test | Redis 7.4 | microdb | ratio |
+|---|---|---|---|
+| SET, unpipelined | 71,124/s | 58,548/s | 0.82x |
+| GET, unpipelined | 60,827/s | 46,904/s | 0.77x |
+| SET, pipeline 16 | 735,294/s | 909,091/s | 1.24x |
+| GET, pipeline 16 | 595,238/s | 909,091/s | 1.53x |
+
+Honest read: unpipelined, microdb holds ~80% of Redis -- respectable for
+~700 lines against a two-decade-old C server. Under pipelining it pulls
+AHEAD: with 16 commands per round trip, per-command overhead dominates and
+microdb's coroutine-per-connection + io_uring path has fewer layers between
+the network and the hash table than Redis's readiness loop. Caveats: string
+workload only (no zsets/Lua/TTL-sweeper threads/etc.), no persistence on
+either side, and Redis carries features this demo deliberately lacks.
+Reproduce:
+
+    make run-microdb &          # :6380
+    redis-benchmark -p 6380 -t set,get -n 50000 -c 50 -P 16 --csv

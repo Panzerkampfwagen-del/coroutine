@@ -146,6 +146,27 @@ make run-echo &
 printf 'hello\n' | nc 127.0.0.1 8080     # -> hello
 ```
 
+## microdb -- a Redis-compatible store on the runtime
+
+`apps/microdb/` is a single-file Redis-compatible string store (~700 lines
+plus the RESP parser) served coroutine-per-connection over the io_uring
+layer: chained hash table with incremental rehash, TTL expiry (EX/PX/EXAT/
+PXAT, EXPIRE/TTL/PERSIST), INCR/DECR, APPEND/MGET/MSET, KEYS *, DBSIZE --
+enough that `redis-cli`, `redis-benchmark`, and real clients work against
+it. The full-scale sibling adds replication and a sharding proxy; this port
+deliberately keeps the core.
+
+Measured against real Redis 7.4 with the same benchmark client: ~80% of
+Redis unpipelined, and 1.2-1.5x FASTER under pipeline 16 (per-command
+overhead dominates once syscalls are batched). Numbers and caveats:
+[benchmarks/RESULTS.md](benchmarks/RESULTS.md).
+
+```sh
+make run-microdb                        # :6380
+redis-cli -p 6380 set hello world
+redis-cli -p 6380 get hello             # -> "world"
+```
+
 ## Fuzzers
 
 Two randomized checkers complement the unit suite:
