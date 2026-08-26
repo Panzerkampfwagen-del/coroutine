@@ -20,7 +20,7 @@ OBJ     := $(patsubst %.c,$(BUILD)/%.o,$(filter %.c,$(SRC))) \
 
 .PHONY: all test sanitize ucontext-test fuzz bench run-echo clean
 
-all: $(BUILD)/test_all $(BUILD)/echo_server
+all: $(BUILD)/test_all $(BUILD)/echo_server $(BUILD)/microdb
 
 $(BUILD):
 	mkdir -p $(BUILD)/src $(BUILD)/tests
@@ -51,6 +51,9 @@ ucontext-test:
 	$(CC) $(CFLAGS) -DCORO_USE_UCONTEXT tests/test_all.c $(SRC) -o $(BUILD)/test_ucx $(LDLIBS)
 	./$(BUILD)/test_ucx
 
+$(BUILD)/microdb: apps/microdb/microdb.c apps/microdb/resp.h $(OBJ)
+	$(CC) $(CFLAGS) -Iapps/microdb $< -o $@ $(filter-out build/src/io.o,$(OBJ)) $(BUILD)/src/io.o $(LDLIBS)
+
 # both fuzzers: randomized producer/consumer workloads checked against
 # invariants the scheduler must uphold (lost items, lost wake-ups, mutex
 # lost updates; FIFO order vs a reference model)
@@ -77,6 +80,9 @@ bench: $(BUILD)/bench_prim
 run-bench: $(BUILD)/echo_server
 	python3 benchmarks/bench.py --spawn build/echo_server --conns 1000 \
 	    --duration 5 --out build/bench_uring.json
+
+run-microdb: $(BUILD)/microdb
+	./$(BUILD)/microdb
 
 run-echo: $(BUILD)/echo_server
 	./$(BUILD)/echo_server

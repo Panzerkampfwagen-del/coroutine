@@ -193,9 +193,21 @@ void runq_wake(coro_t *c)
 
 static void switch_away_to_next(coro_t *self)
 {
-    coro_t *next = runq_pop();
-    if (!next && coro_io_pending() && coro_io_reap(1) > 0)
-        next = runq_pop();     /* a completion woke someone while we blocked */
+    /* Nothing runnable yet. If any coroutine waits on outstanding I/O,
+       block until a completion wakes one -- retrying on transient failures
+       (a signal such as SIGINT interrupts wait_cqe with EINTR; that is a
+       reason to loop, not to die). With no pending I/O this really is a
+       deadlock: every coroutine yielded/parked and none can be woken. */
+    coro_t *next;
+    for (;;) {
+        next = runq_pop();
+        if (next)
+            break;
+        if (!coro_io_pending())
+            break;                     /* genuine deadlock */
+        coro_io_reap(1);
+        reap_finished();
+    }
     if (!next) {
         fprintf(stderr, "coro deadlock: no runnable coroutine left\n");
         abort();
