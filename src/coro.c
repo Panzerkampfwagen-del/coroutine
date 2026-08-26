@@ -9,18 +9,9 @@
 #include <unistd.h>
 #include <ucontext.h>
 
-void coro_swap(coro_ctx_t *from, coro_ctx_t *to); /* src/switch.S */
+#include "coro_internal.h"
 
-struct coro {
-    ucontext_t  ctx;           /* CORO_USE_UCONTEXT builds            */
-    coro_ctx_t  regs;          /* hand-written asm switch builds      */
-    void       *stack;
-    coro_fn     fn;
-    void       *arg;
-    int         finished;
-    int         started;
-    struct coro *next;
-};
+void coro_swap(coro_ctx_t *from, coro_ctx_t *to); /* src/switch.S */
 
 /* ------------------------------------------------------------------ state */
 
@@ -179,6 +170,18 @@ int coro_alive_count(void) { return g_alive; }
 
 coro_t *coro_current(void) { return g_current; }
 
+/* ------------------------------------------------- io_uring integration --
+ * Weak hooks, overridden by src/io.c when the io_uring backend is linked.
+ * Defaults report "no I/O capability" so builds without io.c behave exactly
+ * as before: the run queue alone drives coro_run(), and an empty run queue
+ * with nothing parked is still a deadlock. */
+__attribute__((weak)) int coro_io_pending(void) { return 0; }
+__attribute__((weak)) int coro_io_reap(int block)
+{
+    (void)block;
+    return 0;
+}
+
 /* Used by channels/mutexes to re-queue a coroutine that was parked on a
  * wait list outside the scheduler proper. */
 void runq_wake(coro_t *c)
@@ -191,6 +194,8 @@ void runq_wake(coro_t *c)
 static void switch_away_to_next(coro_t *self)
 {
     coro_t *next = runq_pop();
+    if (!next && coro_io_pending() && coro_io_reap(1) > 0)
+        next = runq_pop();     /* a completion woke someone while we blocked */
     if (!next) {
         fprintf(stderr, "coro deadlock: no runnable coroutine left\n");
         abort();
@@ -236,7 +241,16 @@ void coro_run(void)
                 "coro_run(): must be called once from main after coro_init()\n");
         abort();
     }
-    while (g_runq_head) {
+    /* Keep servicing the world until both work sources are dry: the run
+       queue, and coroutines parked on outstanding io_uring completions.
+       With an empty queue but pending I/O, block on the ring; the harvest
+       requeues whoever completed. */
+    while (g_runq_head || coro_io_pending()) {
+        if (!g_runq_head) {
+            coro_io_reap(1);
+            reap_finished();
+            continue;
+        }
         coro_t *next = runq_pop();
         g_current = next;
 #ifdef CORO_USE_UCONTEXT

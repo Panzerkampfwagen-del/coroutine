@@ -3,8 +3,9 @@
 A cooperative single-threaded coroutine runtime built from the registers up:
 a hand-written x86-64 context switch, mmap'd stacks with `PROT_NONE` guard
 pages, buffered channels with deterministic FIFO delivery, a direct-handoff
-FIFO mutex, and a coroutine-per-connection TCP echo server on non-blocking
-sockets.
+FIFO mutex, an **io_uring I/O layer** (submit-and-park: `coro_read/write/
+accept/connect/sleep`), two scheduling **fuzzers**, and a dual-backend
+coroutine-per-connection TCP echo server.
 
 No dependencies beyond a C17 compiler and GNU `as`. The same suite passes on
 three interchangeable scheduling backends: the hand-written assembly switch,
@@ -32,22 +33,31 @@ implements them where you can read them:
 
 ```
 include/coro.h        public API (scheduler, channels, mutex)
+include/io.h          io_uring-backed I/O API (optional; auto-detected)
 src/switch.S          coro_swap: callee-saved-register context switch (x86-64)
 src/coro.c            scheduler, stacks (mmap + PROT_NONE guard page),
-                      park/wake protocol, reap-list lifecycle
+                      park/wake protocol, reap-list lifecycle, weak I/O hooks
+src/io.c              shared-ring submit-and-park I/O (liburing)
 src/channel.c         ring buffer + sender/receiver wait queues
 src/mutex.c           FIFO direct-handoff mutex (no futex, no atomics)
-examples/echo_server.c  single-threaded concurrent TCP echo server
-tests/test_all.c      assert-based runner: 6 tests, 12 assertions
+examples/echo_server.c  concurrent TCP echo server, io_uring OR nonblock
+tests/test_all.c      assert-based runner: 8 tests across 3 backends
+tests/fuzz/           sched_fuzz + channel_fuzz (model-based)
+benchmarks/           primitive micro-bench + TCP echo load generator
 ```
 
 ## Build & run
 
 ```sh
-make test            # suite on the hand-written asm switch
+make test            # suite on the hand-written asm switch (8 tests)
 make sanitize        # same suite under ASan + UBSan
 make ucontext-test   # portable swapcontext backend instead of asm
+make fuzz            # scheduler fuzzer (20k random workloads) +
+                     # model-based channel fuzzer (20k inputs)
+make bench           # primitive micro-benchmarks (switch/chan/scale)
+make run-bench       # TCP echo load test, 1000 conns (see benchmarks/)
 make run-echo        # echo server on :8080; try: nc 127.0.0.1 8080
+                     #   --no-uring forces the portable fallback backend
 make clean
 ```
 
@@ -108,16 +118,50 @@ three backends (asm, ASan+UBSan, ucontext).
 | 4 | chan_block | values 1,2,3 in order; sender resumed | park/wake-once; buffer-first priority |
 | 5 | mutex | zero CS violations with yields inside | mutual exclusion + direct handoff |
 | 6 | stress | 50 × 10k yields, all reaped | stability at scale, no leaks |
+| 7 | io_sleep | short sleep finishes first despite starting second | coro_run services parked timers after the run queue drains |
+| 8 | io_socketpair | 3 payloads byte-intact through uring read/write | submit→park→completion→resume round-trip |
+
+Tests 7–8 skip themselves gracefully where io_uring is unavailable (e.g. CI
+sandboxes with `kernel.io_uring_disabled`).
 
 ## Echo server
 
-Single thread, one coroutine per connection. The listener accepts until
-`EAGAIN`, then yields; handlers read/write with the same retry-and-yield
-pattern, so thousands of sockets multiplex without threads or epoll loops.
+Single thread, one coroutine per connection, two interchangeable I/O
+backends chosen at startup:
+
+- **io_uring** (default where liburing exists): `accept/read/write` submit to
+  a shared ring and park the caller; the scheduler harvests completions when
+  the run queue empties. Sockets stay blocking — the kernel waits instead.
+- **nonblock** (`--no-uring` or no liburing): the original `EAGAIN` →
+  retry-and-yield pattern.
+
+Measured head-to-head (1000 conns): io_uring ramps connections ~1.5× faster;
+the nonblock backend posts higher raw req/s and lower p50 on hot loopback,
+because an `EAGAIN` retry is one userspace swap while uring is a kernel
+round-trip per op. Full numbers and reproduction commands:
+[benchmarks/RESULTS.md](benchmarks/RESULTS.md).
 
 ```sh
 make run-echo &
 printf 'hello\n' | nc 127.0.0.1 8080     # -> hello
+```
+
+## Fuzzers
+
+Two randomized checkers complement the unit suite:
+
+- **sched_fuzz** builds random producer/consumer workloads (random capacity,
+  producer/consumer counts, item counts, yield/mutex interleavings) and
+  verifies three invariants per iteration: every item consumed exactly once,
+  every coroutine reaches its end (lost wake-ups surface as uncompleted
+  coroutines, not hangs), and mutex-protected counters match attempted
+  increments exactly.
+- **channel_fuzz** replays pseudo-random send/receive sequences against a
+  reference FIFO, catching any ordering or buffering bug; compiles as a
+  libFuzzer target with `-DFUZZ_LIBFUZZER`.
+
+```sh
+make fuzz    # 20000 iterations each, seeded and reproducible
 ```
 
 ## Limitations

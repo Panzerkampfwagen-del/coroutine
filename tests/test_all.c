@@ -32,6 +32,92 @@ static void record(int x)
     if (g_nevents < MAX_EVENTS) g_events[g_nevents++] = x;
 }
 
+#ifdef CORO_HAVE_IO_URING
+#include <sys/socket.h>
+#include <unistd.h>
+#include "../include/io.h"
+
+/* ------------------------------------- test 7: io_uring sleep ordering -- */
+/* Two sleepers with different delays: the SHORTER one must finish first even
+   though it was started second. coro_run() must keep harvesting completions
+   after the run queue drains (both coros are parked on timers, nothing is
+   runnable), which exercises the io-pending branch of the scheduler loop. */
+static int g_sleeper_done[2];
+
+static void sleeper(void *arg)
+{
+    long id = (long)arg;
+    coro_sleep(id == 0 ? 120 : 30);
+    g_sleeper_done[id] = 1;
+    record((int)id);
+}
+
+static void test_io_sleep_ordering(void)
+{
+    printf("[test_io_sleep_ordering]\n");
+    if (coro_io_probe() != 0) {
+        printf("  SKIP (io_uring unavailable in this environment)\n");
+        return;
+    }
+    memset(g_sleeper_done, 0, sizeof(g_sleeper_done));
+    g_nevents = 0;
+    coro_init();
+    coro_create(sleeper, (void *)0);   /* long sleep, started first  */
+    coro_create(sleeper, (void *)1);   /* short sleep, started second */
+    coro_run();
+    CHECK(g_nevents == 2 && g_events[0] == 1 && g_events[1] == 0 &&
+          g_sleeper_done[0] && g_sleeper_done[1],
+          "shorter sleep completes first; runq-empty park serviced");
+}
+
+/* ------------------------------------ test 8: io_uring socketpair echo -- */
+/* A writer coroutine pushes three payloads through a socketpair; the main
+   coroutine (as a coroutine) reads them back with coro_read and checks byte
+   integrity. Proves read/write submit/park/resume round-trips. */
+static int g_sp[2];
+
+static void sp_writer(void *arg)
+{
+    UNUSED(arg);
+    const char *msgs[] = {"alpha", "beta", "gamma"};
+    for (int i = 0; i < 3; i++)
+        coro_write(g_sp[0], msgs[i], strlen(msgs[i]) + 1);
+}
+
+static void sp_reader(void *arg)
+{
+    UNUSED(arg);
+    char buf[32];
+    for (int i = 0; i < 3; i++) {
+        int r = coro_read(g_sp[1], buf, sizeof(buf));
+        record(r > 0 && strcmp(buf, i == 0 ? "alpha" : i == 1 ? "beta"
+                                                              : "gamma") == 0);
+    }
+}
+
+static void test_io_socketpair_echo(void)
+{
+    printf("[test_io_socketpair_echo]\n");
+    if (coro_io_probe() != 0) {
+        printf("  SKIP (io_uring unavailable in this environment)\n");
+        return;
+    }
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, g_sp) < 0) {
+        CHECK(0, "socketpair setup");
+        return;
+    }
+    g_nevents = 0;
+    coro_init();
+    coro_create(sp_writer, NULL);
+    coro_create(sp_reader, NULL);
+    coro_run();
+    close(g_sp[0]);
+    close(g_sp[1]);
+    CHECK(g_nevents == 3 && g_events[0] && g_events[1] && g_events[2],
+          "3 messages round-trip through uring read/write intact");
+}
+#endif /* CORO_HAVE_IO_URING */
+
 /* ------------------------------------------- test 1: ping-pong yields --- */
 
 static void ping(void *arg)
@@ -249,6 +335,10 @@ int main(int argc, char **argv)
         { 4, "chan_block", test_channel_blocking },
         { 5, "mutex",      test_mutex_mutual_exclusion },
         { 6, "stress",     test_stress_reap },
+#ifdef CORO_HAVE_IO_URING
+        { 7, "io_sleep",   test_io_sleep_ordering },
+        { 8, "io_socketpair", test_io_socketpair_echo },
+#endif
     };
 
     for (size_t i = 0; i < sizeof(tests)/sizeof(tests[0]); i++) {
