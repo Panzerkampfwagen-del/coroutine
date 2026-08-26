@@ -1,5 +1,7 @@
 # coro — a stackful coroutine runtime in C17
 
+> Full design write-up: [docs/design.md](docs/design.md)
+
 A cooperative single-threaded coroutine runtime built from the registers up:
 a hand-written x86-64 context switch, mmap'd stacks with `PROT_NONE` guard
 pages, buffered channels with deterministic FIFO delivery, a direct-handoff
