@@ -155,8 +155,8 @@ plus the RESP parser) served coroutine-per-connection over the io_uring
 layer: chained hash table with incremental rehash, TTL expiry (EX/PX/EXAT/
 PXAT, EXPIRE/TTL/PERSIST), INCR/DECR, APPEND/MGET/MSET, KEYS *, DBSIZE --
 enough that `redis-cli`, `redis-benchmark`, and real clients work against
-it. The full-scale sibling adds replication and a sharding proxy; this port
-deliberately keeps the core.
+it. Replication and a sharding proxy are natural next layers (see the
+roadmap in docs/design.md); this build deliberately keeps to the core.
 
 Measured against real Redis 7.4 with the same benchmark client: ~80% of
 Redis unpipelined, and 1.2-1.5x FASTER under pipeline 16 (per-command
